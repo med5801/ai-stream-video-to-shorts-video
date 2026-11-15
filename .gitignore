@@ -1,0 +1,16 @@
+# environment / downloaded tools
+.venv/
+__pycache__/
+*.pyc
+tools/TwitchDownloader/
+
+# your data (videos, outputs, personal images)
+vods/
+shorts/
+assets/*
+!assets/README.md
+*.mp4
+
+# secrets - never commit
+*cookies*.txt
+.env

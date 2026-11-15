@@ -1,0 +1,8 @@
+# YOUR STANDING EDITING RULES
+# Every line here is sent to the brain for EVERY clip as "rules from the channel owner".
+# Lines starting with '#' are ignored. Any language works.
+# Examples (remove the leading # to activate):
+# Hooks must be 4 words or fewer.
+# Never pick a cut that starts with swearing.
+# Zoom into the gameplay during police chases.
+# Don't change scenes more than twice per Short.

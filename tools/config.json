@@ -1,0 +1,21 @@
+{
+  "brain": "auto",
+  "order": ["claude", "gemini"],
+  "claude_model": "",
+  "gemini_model": "",
+  "whisper_model": "medium",
+  "whisper_device": "auto",
+  "review_plan": true,
+  "review_render": true,
+  "min_score": 6,
+  "reason_language": "English",
+  "caption_font": "Montserrat ExtraBold",
+  "caption_size": 92,
+  "caption_color": "#FFFFFF",
+  "highlight_color": "#FFE600",
+  "hook_seconds": 2.5,
+  "auto_chat": true,
+  "auto_whoosh_on_zoom": true,
+  "sfx_volume": 0.8,
+  "chat_lines": 5
+}

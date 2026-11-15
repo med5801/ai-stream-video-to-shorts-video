@@ -1,0 +1,17 @@
+{
+  "whoosh": "fast air whoosh, for zooms, cuts and transitions",
+  "swoosh_up": "rising swoosh, for text/sticker or image appearing",
+  "pop": "short bubbly pop, for stickers, emphasis words, small accents",
+  "ding": "bright bell ding, for a correct guess, realization or 'ding ding' moment",
+  "boom": "deep dramatic meme boom (vine-boom style), for shocking or awkward punchlines",
+  "bass_drop": "long bass drop, for a big reveal or hype moment",
+  "riser": "2 s tension riser that builds up, put it right before the payoff",
+  "click": "tiny UI click, for subtle accents",
+  "camera_shutter": "camera shutter snap, for freeze frames or 'caught in 4K' moments",
+  "glitch": "digital glitch stutter, for 'brain broken' / error / confusion moments",
+  "buzzer": "wrong-answer buzzer, for fails, bad takes, 'nope' moments",
+  "record_scratch": "record scratch stop, for 'wait, what?' / sudden stop moments",
+  "heartbeat": "two heartbeat thumps, for tense / suspense moments",
+  "dramatic_hit": "orchestral-style dramatic hit, for epic or over-dramatic moments",
+  "sad_trombone": "sad descending 'wah wah wah' notes, for fails"
+}
