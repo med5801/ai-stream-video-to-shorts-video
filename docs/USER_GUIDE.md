@@ -16,6 +16,7 @@ Everything you need to install, run, steer and troubleshoot the Twitch → Short
 10. [Edit plan reference](#10-edit-plan-reference)
 11. [Troubleshooting](#11-troubleshooting)
 12. [Good practice and content rules](#12-good-practice-and-content-rules)
+13. [Hands-free: live mode and the watcher](#13-hands-free-live-mode-and-the-watcher)
 
 ---
 
@@ -308,7 +309,14 @@ mixed on top and a limiter keeps peaks below 0 dBFS.
 
 Written by the brain to `meta.txt` (title ≤ 60 characters ending with `#shorts`, two-sentence
 description with a question for comments, 5–8 hashtags), together with the score and the
-brain's reason.
+brain's reason. A credit block is added automatically under the description:
+
+```
+🎥 Credit: xQc → https://www.twitch.tv/xqc
+📺 Full stream: https://www.twitch.tv/videos/2932113307?t=2h22m20s
+```
+
+The second link opens the stream at the exact second the clip starts.
 
 ---
 
@@ -330,6 +338,7 @@ run.bat <vod id or link> [options]
 | `--redownload` | find and download the clips again |
 | `--force-transcribe` | redo the transcription |
 | `--no-review` | no questions, fully automatic |
+| `--force` | render even if the brain says *skip* or the score is below `min_score` |
 
 Passing `--idea` also forces a re-plan.
 
@@ -354,6 +363,34 @@ for picking clips by hand.
 ### `revise.bat`
 
 Interactive re-edit of one clip (see 5.5).
+
+### `live.bat` / `live.py`
+
+```
+live.bat <twitch username> [options]
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--render` | | turn every clip into a Short right away (`run.py --only N --no-review`) |
+| `--ratio` | 2.2 | spike threshold: last 30 s chat score ÷ median of the last 5 min |
+| `--min-score` | 15 | minimum chat score in the window |
+| `--window` / `--pre` / `--post` | 30 / 35 / 25 | same meaning as in `highlights.py` |
+| `--gap` | 150 | minimum seconds between two moments |
+| `--max-clips` | 30 | stop clipping after this many |
+| `--quality` | 1080p60 | video quality |
+| `--test` | | force one clip right after warm-up (checks the whole pipeline) |
+
+### `watcher.bat` / `watcher.py`
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--once` | | one check, then exit (for Windows Task Scheduler) |
+| `--list` | | only list the latest VODs per streamer and their status |
+| `--every` | 30 | minutes between checks |
+| `--last` | 3 | how many latest VODs to look at per streamer |
+| `--backlog` | 1 | for a newly added streamer, how many existing VODs to process |
+| `--mode full\|highlights` | `watch_mode` | `full` makes Shorts, `highlights` only downloads clips |
 
 ---
 
@@ -382,6 +419,8 @@ Interactive re-edit of one clip (see 5.5).
 | `sfx_volume` | 0.8 | master volume for sound effects |
 | `chat_lines` | 5 | max lines in the chat box |
 | `fps` / `crf` | 30 / 20 | output frame rate / H.264 quality (lower = better) |
+| `watch_mode` | `"full"` | watcher default: `full` (Shorts) or `highlights` (clips only) |
+| `twitch_client_id` / `twitch_client_secret` | `""` | optional Twitch API app for the watcher (or set `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` env vars to keep them out of git) |
 
 ---
 
@@ -389,9 +428,12 @@ Interactive re-edit of one clip (see 5.5).
 
 ```
 repo/
-├─ run.bat  highlights.bat  revise.bat  setup.bat
+├─ run.bat  highlights.bat  revise.bat  setup.bat  live.bat  watcher.bat
 ├─ tools/
 │  ├─ run.py brain.py render.py frames.py transcribe.py highlights.py shorts_common.py
+│  ├─ live.py watcher.py
+│  ├─ streamers.txt      streamers for the watcher (one per line)
+│  ├─ watcher_state.json VODs the watcher already handled
 │  ├─ config.json        settings
 │  ├─ editor_notes.txt   your standing rules
 │  ├─ layouts.json       saved camera boxes per streamer
@@ -403,7 +445,7 @@ repo/
 │  └─ work/clip_NN/      words.json, sheet_*.jpg, layout.jpg, frames.json, plan.json
 └─ shorts/<date>/<streamer>_<vod>_<nn>/
    ├─ short.mp4          the Short
-   ├─ meta.txt           title, description, hashtags, score, reason
+   ├─ meta.txt           title, description, streamer credit, hashtags, score, reason
    ├─ check.jpg          3×3 frame grid for a quick visual check
    ├─ plan.json          the plan that was rendered
    └─ subs.ass           captions / hook / stickers / chat (editable in Aegisub)
@@ -466,13 +508,20 @@ You can edit `vods/<id>/work/clip_NN/plan.json` by hand (the `plan` object) and 
 | Wrong camera box | Type an idea in the review (*"the camera is bottom-left"*) or fix/delete the streamer in `tools/layouts.json`. |
 | VOD not found | The VOD was deleted, is sub-only, or the streamer disabled VODs. Twitch keeps VODs only 7–60 days. |
 | `av` / `metadata_errors` error | `.venv\Scripts\pip install "av==16.0.1"` |
+| `live.py`: "is not live right now" | The streamer is offline, or yt-dlp is outdated: `.venv\Scripts\pip install -U yt-dlp`. |
+| `live.py`: "No VOD found for the live stream" | The streamer has VODs disabled – live mode needs the live VOD. |
+| `live.py` never finds a moment | Big chats rarely reach 2.2×. Watch the per-minute `= 1.0x` status lines and lower `--ratio` (1.6–1.8 for very large chats). |
+| Watcher keeps saying "waiting" | Without the Twitch API the watcher needs two checks with the same VOD length to know a stream ended. Add API keys to skip the wait. |
 
 ---
 
 ## 12. Good practice and content rules
 
 - **Ask permission / respect creators.** Many streamers welcome clip channels, some don't.
-  Credit the streamer in the description.
+  The streamer credit is added to `meta.txt` automatically – keep it in the description.
+- **Prefer authorised clipping.** Many streamers and brands run paid clipping campaigns
+  (e.g. on Whop Content Rewards or Vyro) where clipping is explicitly allowed and you are paid
+  per view. Read each campaign's brief (required tags, platforms, length) before posting.
 - **Transform the content.** Hook, captions, zooms, stickers and commentary make a Short more
   than a re-upload. YouTube may limit monetization of *reused content* that adds nothing.
 - **Use assets and sounds you have the rights to.** The bundled sound effects and font are free
@@ -480,3 +529,67 @@ You can edit `vods/<id>/work/clip_NN/plan.json` by hand (the `plan` object) and 
 - **Never commit secrets.** Cookie files and `.env` are git-ignored – keep it that way.
 - **Check before uploading.** Look at `check.jpg` or watch the Short; the brain can be wrong
   about timing or context.
+
+---
+
+## 13. Hands-free: live mode and the watcher
+
+Typing VOD ids does not scale: every stream of every streamer has a new one. Two tools find
+them for you.
+
+### 13.1 Live mode – clip while the stream is still running
+
+```
+live.bat xqc                 # clips only
+live.bat xqc --render        # clips + a Short for each, while the stream goes on
+live.bat xqc --ratio 1.7     # catch more moments (very large chats)
+```
+
+1. yt-dlp checks that the channel is live and finds the stream's start time and **live VOD id**
+   (Twitch creates the archive VOD as soon as the stream starts).
+2. The script joins the Twitch chat **anonymously** (read-only IRC, no account) and scores every
+   message with the same hype weights as `highlights.py`.
+3. Every 5 s it compares the last 30 s with the median of the last 5 minutes. When the ratio
+   passes `--ratio` it keeps watching 30 s more and keeps the strongest window.
+4. About 1.5 minutes later (Twitch needs a moment to write the VOD) it downloads **only that
+   part** of the live VOD with TwitchDownloader – typically in under 30 seconds.
+5. `chat.json`, `clips.json` and `highlights.txt` are written in the normal format, so
+   `run.bat <vod id>` works on them later as well.
+
+A status line is printed every minute:
+
+```
+chat: 2078 msgs total | last 30 s score 407 (normal 391) = 1.0x | clips 0
+🔥 MOMENT #1: 2:22:20-2:23:50  chat 2.6x  (download in ~114 s)
+✔ #1 ready: ...\vods\2932113307\clip_01_2h22m20s.mp4
+```
+
+Use the `= 1.0x` numbers to tune `--ratio`: small chats 2.5+, medium 2.0–2.2, huge 1.6–1.8.
+Open one window per streamer. When the stream ends the script downloads any pending clips and
+exits.
+
+### 13.2 Watcher – process finished streams automatically
+
+1. Put Twitch usernames in `tools/streamers.txt` (one per line, `#` for comments). The file is
+   created on the first run.
+2. Run `watcher.bat --list` once to see what it finds.
+3. Leave `watcher.bat` running (or schedule `watcher.bat --once` with Task Scheduler).
+
+Every 30 minutes it lists each streamer's latest archive VODs and runs `run.py <vod> --no-review`
+on each new **finished** stream (at least 20 minutes long). It skips:
+
+- streams that are still live (they are handled once they end),
+- VODs you already processed by hand (clips in `vods/<id>` or a Short in `shorts/`),
+- older VODs of a newly added streamer (only the latest `--backlog` ones are processed),
+- VODs it already handled (`tools/watcher_state.json`; delete an entry to redo it).
+
+**VOD source.** By default it uses yt-dlp, no setup needed; a stream counts as finished when
+its VOD length is unchanged between two checks. For instant detection create a free app at
+[dev.twitch.tv/console](https://dev.twitch.tv/console) and set its Client ID and Secret
+(config.json or the `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` environment variables).
+
+`--mode highlights` (or `"watch_mode": "highlights"`) only downloads the clips – no brain calls,
+no tokens – so you can review them later with `run.bat`.
+
+> Automatic modes render without asking. Always look at `check.jpg` before uploading.
+

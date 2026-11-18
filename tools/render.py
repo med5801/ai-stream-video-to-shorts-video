@@ -340,8 +340,9 @@ def render(clip, plan, words, out_dir, chat=None):
     ffmpeg(["-i", out, "-vf", f"fps={n / max(1.0, e - s):.4f},scale=360:-2,tile=3x3",
             "-frames:v", "1", os.path.join(out_dir, "check.jpg")])
     with open(os.path.join(out_dir, "meta.txt"), "w", encoding="utf-8") as f:
+        credit = f"{plan['credit']}\n\n" if plan.get("credit") else ""
         f.write(f"BASLIK:\n{plan.get('title', '')}\n\nACIKLAMA:\n{plan.get('description', '')}\n\n"
-                f"{' '.join(plan.get('hashtags', []))}\n\n---\nPuan: {plan.get('score')} | "
+                f"{credit}{' '.join(plan.get('hashtags', []))}\n\n---\nPuan: {plan.get('score')} | "
                 f"{plan.get('reason', '')}\n")
     save_json(os.path.join(out_dir, "plan.json"), plan)
     return out
