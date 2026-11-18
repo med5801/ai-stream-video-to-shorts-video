@@ -1,0 +1,16 @@
+@echo off
+REM Double-click: asks for a Twitch username, listens to the live chat and clips spikes.
+REM Command line: live.bat xqc [--render] [--ratio 1.7]   (see docs/USER_GUIDE.md)
+cd /d "%~dp0tools"
+set "PYTHONUTF8=1"
+chcp 65001 >nul
+set "VENV=%~dp0.venv"
+set "NV=%VENV%\Lib\site-packages\nvidia"
+set "PATH=%NV%\cublas\bin;%NV%\cudnn\bin;%PATH%"
+set "PY=%VENV%\Scripts\python.exe"
+if not exist "%PY%" set "PY=python"
+set "ARGS=%*"
+if "%ARGS%"=="" set /p "ARGS=Twitch username (e.g. xqc): "
+if "%ARGS%"=="" exit /b 1
+"%PY%" live.py %ARGS%
+pause

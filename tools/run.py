@@ -5,6 +5,7 @@
   run.bat 2929768251 --idea "shorter hooks, exaggerate the zooms"
   run.bat 2929768251 --only 2,4 --replan
   run.bat 2929768251 --no-review          (no questions, fully automatic)
+  run.bat 2929768251 --only 1 --force     (render a low-score clip anyway)
 """
 import argparse
 import datetime
@@ -44,6 +45,17 @@ def get_clips(vod_dir):
             n, h, mi, se = map(int, m.groups())
             out.append({"n": n, "file": os.path.basename(p), "start": h * 3600 + mi * 60 + se})
     return out
+
+
+def credit_text(ctx, clip):
+    """Streamer credit added to the description (channel link + the moment in the stream)."""
+    login = ctx.get("login") or ""
+    if not login or login == "unknown":
+        return ""
+    t = int(clip.get("start", 0))
+    stamp = f"{t // 3600}h{t % 3600 // 60:02d}m{t % 60:02d}s"
+    return (f"🎥 Credit: {ctx.get('streamer') or login} → https://www.twitch.tv/{login}\n"
+            f"📺 Full stream: https://www.twitch.tv/videos/{ctx['vod']}?t={stamp}")
 
 
 def transcript_text(words):
@@ -167,7 +179,7 @@ def process_clip(ctx, clip, args, c):
     while True:
         show_plan(name, plan, model)
         if not review:
-            if not plan["keep"] or plan["score"] < c["min_score"]:
+            if not args.force and (not plan["keep"] or plan["score"] < c["min_score"]):
                 print("  -> skipped (brain decision / low score)")
                 return None
             break
@@ -203,6 +215,7 @@ def process_clip(ctx, clip, args, c):
 
     out_dir = os.path.join(SHORTS, datetime.date.today().isoformat(),
                            f"{ctx['login']}_{ctx['vod']}_{clip['n']:02d}")
+    plan["credit"] = credit_text(ctx, clip)
     while True:
         print("  rendering...")
         out = render(clip_path, plan, words, out_dir, clip_chat(ctx["chat"], clip["start"], dur))
@@ -232,6 +245,7 @@ def main():
     ap.add_argument("--replan", action="store_true", help="ignore the saved plan")
     ap.add_argument("--force-transcribe", action="store_true")
     ap.add_argument("--no-review", action="store_true", help="no questions, do everything")
+    ap.add_argument("--force", action="store_true", help="render even if the brain says skip / low score")
     args = ap.parse_args()
     c = config()
 

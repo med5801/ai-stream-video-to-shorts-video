@@ -14,3 +14,8 @@ assets/*
 # secrets - never commit
 *cookies*.txt
 .env
+
+# watcher / live-mode state (personal)
+tools/streamers.txt
+tools/watcher_state.json
+tools/watcher_log.txt
