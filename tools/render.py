@@ -2,6 +2,7 @@
 import os
 import re
 
+import censor
 from shorts_common import ASSETS, TOOLS, config, ffmpeg, probe, save_json, sfx_path
 
 OW, OH = 1080, 1920
@@ -101,6 +102,7 @@ def auto_chat(plan, chat, dur_clip):
 
 def chat_events(plan, info, c, dur):
     chat = info.get("chat_msgs") or []
+    cz = censor.mask_text if c["censor"] else (lambda x: x)
     s = plan["cut"]["start"]
     x, y, an = info["chat"]
     out = []
@@ -119,7 +121,7 @@ def chat_events(plan, info, c, dur):
         for k in range(len(msgs)):
             shown = msgs[max(0, k + 1 - c["chat_lines"]): k + 1]
             text = "\\N".join(f"{{\\c{user_color(m['user'], m.get('color'))}}}{strip_text(m['user'])}"
-                                f"{{\\c&H00FFFFFF&}}: {strip_text(m['body'])}" for m in shown)
+                                f"{{\\c&H00FFFFFF&}}: {strip_text(cz(m['body']))}" for m in shown)
             t0 = a + k * step
             t1 = a + (k + 1) * step if k + 1 < len(msgs) else b
             fade = "\\fad(120,0)" if k == 0 else ""
@@ -294,6 +296,18 @@ def render(clip, plan, words, out_dir, chat=None):
     if c["auto_whoosh_on_zoom"] and not plan.get("sfx") and sfx_path("whoosh"):
         plan["sfx"] = [{"t": max(0, z["t"] - 0.12), "name": "whoosh", "vol": 0.6} for z in plan.get("zooms", [])]
 
+    spans = []
+    if c["censor"]:
+        # Profanity: only the word is masked in the captions; that span is bleeped/muted in the audio
+        words, spans = censor.find(words, s, e, c["censor_pad"])
+        for k in ("hook", "title", "description"):
+            plan[k] = censor.mask_text(plan.get(k, ""))
+        plan["stickers"] = [dict(x, text=censor.mask_text(x["text"])) for x in plan.get("stickers", [])]
+        plan["emphasis"] = [censor.mask_word(w) if censor.is_bad(w) else w for w in plan.get("emphasis", [])]
+        plan["censored"] = [list(x) for x in spans]
+        if spans:
+            print(f"  (censored {len(spans)} word(s) at " + ", ".join(f"{a:.1f}s" for a, _ in spans) + ")")
+
     graph, info = build_graph(plan, W, H)
     info["chat_msgs"] = chat
     ass = os.path.join(out_dir, "subs.ass")
@@ -315,8 +329,18 @@ def render(clip, plan, words, out_dir, chat=None):
                   f"[{last}][ov{k}]overlay=x=(W-w)/2:y={y}-h/2:enable='between(t,{a:.2f},{b:.2f})'[ob{k}]")
         last, idx = f"ob{k}", idx + 1
     graph += (f";[{last}]fps={c['fps']},ass='{rel(ass)}':fontsdir=fonts,format=yuv420p[v];"
-              f"[0:a]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a0]")
+              f"[0:a]aresample=48000,aformat=channel_layouts=stereo")
+    if spans:
+        # Mute BEFORE loudnorm: loudnorm buffers frames, so timestamps drift after it
+        ex = censor.enable_expr(spans)
+        graph += f",volume=0:enable='{ex}'"
+    graph += ",loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a0]"
     mix = ["[a0]"]
+    if spans and c["censor_mode"] == "bleep":
+        # classic 1 kHz TV bleep, only inside the censored spans
+        graph += (f";aevalsrc='{c['censor_bleep_volume']:.2f}*sin(2*PI*1000*t)*gt({ex},0)'"
+                  f":s=48000:d={dur:.2f},aformat=channel_layouts=stereo[bleep]")
+        mix.append("[bleep]")
     for k, fx in enumerate(plan.get("sfx", [])):
         path = sfx_path(fx["name"])
         a = fx["t"] - s
@@ -340,8 +364,9 @@ def render(clip, plan, words, out_dir, chat=None):
     ffmpeg(["-i", out, "-vf", f"fps={n / max(1.0, e - s):.4f},scale=360:-2,tile=3x3",
             "-frames:v", "1", os.path.join(out_dir, "check.jpg")])
     with open(os.path.join(out_dir, "meta.txt"), "w", encoding="utf-8") as f:
-        f.write(f"BASLIK:\n{plan.get('title', '')}\n\nACIKLAMA:\n{plan.get('description', '')}\n\n"
-                f"{' '.join(plan.get('hashtags', []))}\n\n---\nPuan: {plan.get('score')} | "
+        credit = f"{plan['credit']}\n\n" if plan.get("credit") else ""
+        f.write(f"TITLE:\n{plan.get('title', '')}\n\nDESCRIPTION:\n{plan.get('description', '')}\n\n"
+                f"{credit}{' '.join(plan.get('hashtags', []))}\n\n---\nScore: {plan.get('score')} | "
                 f"{plan.get('reason', '')}\n")
     save_json(os.path.join(out_dir, "plan.json"), plan)
     return out

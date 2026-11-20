@@ -1,7 +1,7 @@
 # Twitch → Shorts Pipeline
 
 Turn a Twitch VOD into ready-to-upload vertical YouTube Shorts with one command.
-It finds the moments where chat went wild, lets an AI "brain" (Claude or Gemini) watch them
+It finds the moments where chat went wild, lets an AI "brain" (Gemini or Claude) watch them
 and write an edit plan, then renders a 1080×1920 Short with ffmpeg — hook text, word-by-word
 captions, camera/gameplay layouts, zooms, stickers, sound effects and an on-screen chat box.
 
@@ -13,7 +13,7 @@ flowchart LR
     A[Twitch VOD id] --> B[highlights.py<br/>chat spikes → raw clips]
     B --> C[transcribe.py<br/>Whisper word timestamps]
     C --> D[frames.py<br/>contact sheets]
-    D --> E{brain.py<br/>Claude / Gemini}
+    D --> E{brain.py<br/>Gemini / Claude}
     E -->|edit plan JSON| F[render.py<br/>ffmpeg]
     F --> G[short.mp4 + title/description]
     E -.your idea.-> E
@@ -24,8 +24,15 @@ flowchart LR
 
 - **Hype detection from chat** – weighted chat activity (KEKW, LUL, WHAT, 😂…) against a local
   baseline, so it finds real spikes, not just busy hours.
-- **Two brains, automatic fallback** – Claude Code (Claude Pro/Max login) and Gemini CLI
-  (Google login). In `auto` mode, if one hits its usage limit the other takes over.
+- **Gemini by default, Claude optional** – Gemini through Google's Antigravity CLI (`agy`),
+  Claude Code (Claude Pro/Max login) or the older Gemini CLI; `auto` mode falls back when one
+  hits its usage limit.
+- **Only the good ones** – the brain scores each clip 1–10 (one decimal, strict); only clips
+  scoring **7.5+** become Shorts (`min_score`).
+- **Profanity censoring** – swear words are masked in the captions (`F******`) and bleeped in
+  the audio, rule-based from Whisper's word timestamps.
+- **Live mode, watcher, resume** – clip streams while they're live, process finished streams
+  of a streamer list automatically, and pick up half-finished streams where you left off.
 - **Layouts & scenes** – camera on top / gameplay below, full camera, full gameplay, blurred
   background; the brain can switch layout, enlarge the camera or zoom into the action mid-clip.
 - **Captions** – 2 words at a time, active word highlighted, emphasis words bigger.
@@ -42,12 +49,11 @@ flowchart LR
 1. Clone or download this repository (keep it in a folder **without** special characters if
    possible, e.g. `C:\shorts`).
 2. Double-click **`setup.bat`** – installs the Python packages, TwitchDownloader and FFmpeg.
-3. Install at least one brain and log in once:
-   ```powershell
-   irm https://claude.ai/install.ps1 | iex      # Claude Code, then run: claude
-   npm install -g @google/gemini-cli             # Gemini CLI, then run: gemini
-   ```
+3. Install a brain and log in once: the **Antigravity CLI** (`agy`, default – sign in with
+   Google), or Claude Code (`irm https://claude.ai/install.ps1 | iex`, then `claude`) and set
+   `"brain": "claude"` in `tools/config.json`.
 4. Double-click **`run.bat`** and paste a VOD id (the number in `twitch.tv/videos/<id>`).
+   Or clip a live stream: `live.bat <streamer> --render`; pick up later with `resume.bat`.
 
 Finished Shorts land in `shorts/<date>/<streamer>_<vod>_<nn>/`.
 
@@ -57,7 +63,7 @@ Finished Shorts land in `shorts/<date>/<streamer>_<vod>_<nn>/`.
 
 - Windows 10/11, Python 3.10–3.13
 - An NVIDIA GPU is optional (speeds up transcription)
-- A Claude Pro/Max account (for Claude Code) and/or a Google account (for Gemini CLI)
+- A Google account (Gemini via Antigravity CLI) and/or a Claude Pro/Max account (Claude Code)
 
 ## Credits & licenses
 

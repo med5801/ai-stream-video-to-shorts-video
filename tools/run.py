@@ -5,6 +5,8 @@
   run.bat 2929768251 --idea "shorter hooks, exaggerate the zooms"
   run.bat 2929768251 --only 2,4 --replan
   run.bat 2929768251 --no-review          (no questions, fully automatic)
+  run.bat 2929768251 --only 1 --force     (render even if the score is below min_score)
+  run.bat 2929768251 --brain claude       (this run with Claude instead of the default Gemini)
 """
 import argparse
 import datetime
@@ -87,13 +89,24 @@ def clip_chat(chat, start, dur):
     return out
 
 
+def credit_text(ctx, clip):
+    """Streamer credit appended to the description (channel link + timestamp in the VOD)."""
+    login = ctx.get("login") or ""
+    if not login or login == "unknown":
+        return ""
+    t = int(clip.get("start", 0))
+    stamp = f"{t // 3600}h{t % 3600 // 60:02d}m{t % 60:02d}s"
+    return (f"🎥 Credit: {ctx.get('streamer') or login} → https://www.twitch.tv/{login}\n"
+            f"📺 Full stream: https://www.twitch.tv/videos/{ctx['vod']}?t={stamp}")
+
+
 # ---------- review (the owner's idea slot) ----------
 
 def show_plan(name, p, model):
     s, e = p["cut"]["start"], p["cut"]["end"]
     verdict = "KEEP" if p["keep"] else "SKIP"
     print(f"\n  ┌─ {name}  [{model}]")
-    print(f"  │ Verdict: {verdict}   Score: {p['score']:.0f}/10   {p.get('reason', '')}")
+    print(f"  │ Verdict: {verdict}   Score: {p['score']:.1f}/10   {p.get('reason', '')}")
     print(f"  │ Cut  : {s:.1f}-{e:.1f} s ({e - s:.0f} s)   Layout: {p['layout']}")
     print(f"  │ Hook : {p['hook']}")
     if p["zooms"]:
@@ -152,6 +165,7 @@ def process_clip(ctx, clip, args, c):
         "known_layout": layouts.get(ctx["login"]),
         "notes": brain.standing_notes(),
         "run_idea": args.idea,
+        "min_score": c["min_score"],
     }
     plan_path = os.path.join(work, "plan.json")
     saved = load_json(plan_path)
@@ -167,8 +181,8 @@ def process_clip(ctx, clip, args, c):
     while True:
         show_plan(name, plan, model)
         if not review:
-            if not plan["keep"] or plan["score"] < c["min_score"]:
-                print("  -> skipped (brain decision / low score)")
+            if not args.force and (not plan["keep"] or plan["score"] < c["min_score"]):
+                print(f"  -> skipped (brain decision / score {plan['score']:.1f} < {c['min_score']})")
                 return None
             break
         if plan["keep"] and plan["score"] >= c["min_score"]:
@@ -203,6 +217,7 @@ def process_clip(ctx, clip, args, c):
 
     out_dir = os.path.join(SHORTS, datetime.date.today().isoformat(),
                            f"{ctx['login']}_{ctx['vod']}_{clip['n']:02d}")
+    plan["credit"] = credit_text(ctx, clip)
     while True:
         print("  rendering...")
         out = render(clip_path, plan, words, out_dir, clip_chat(ctx["chat"], clip["start"], dur))
@@ -224,7 +239,8 @@ def main():
     utf8_console()
     ap = argparse.ArgumentParser()
     ap.add_argument("vod", help="VOD id or link")
-    ap.add_argument("--brain", choices=["auto", "claude", "gemini"], help="overrides config.json")
+    ap.add_argument("--brain", choices=["auto", "gemini", "claude", "antigravity", "gemini_cli"],
+                    help="overrides config.json (default: gemini)")
     ap.add_argument("--idea", "--fikir", dest="idea", default="", help="your editing idea for this run")
     ap.add_argument("--top", type=int, default=5)
     ap.add_argument("--only", default="", help="only these clips, e.g. 1,3")
@@ -232,6 +248,7 @@ def main():
     ap.add_argument("--replan", action="store_true", help="ignore the saved plan")
     ap.add_argument("--force-transcribe", action="store_true")
     ap.add_argument("--no-review", action="store_true", help="no questions, do everything")
+    ap.add_argument("--force", action="store_true", help="render even if the brain says skip / low score")
     args = ap.parse_args()
     c = config()
 
@@ -274,7 +291,7 @@ def main():
     print(f"\nDone: {len(done)} Shorts ready.")
     for d in done:
         print("  " + d)
-    if done:
+    if done and not args.no_review:     # automatic modes (live/watcher/resume): don't pop windows
         open_file(os.path.dirname(done[0]))
 
 

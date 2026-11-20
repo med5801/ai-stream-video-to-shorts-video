@@ -1,9 +1,11 @@
 """Brain: frames + transcript + chat -> edit plan (JSON).
 
-Two backends, chosen with "brain" in config.json:
-  "claude" -> Claude Code CLI (Claude Pro/Max login)   command: claude
-  "gemini" -> Gemini CLI (Google account login)        command: gemini
-  "auto"   -> tries the "order" list; on a limit/error it falls back to the next one
+DEFAULT: Gemini through the Antigravity CLI ("agy", model from "agy_model" in config.json).
+Chosen with "brain" in config.json:
+  "gemini"     -> Gemini via Antigravity CLI (default; "antigravity"/"agy" are aliases)
+  "claude"     -> Claude Code CLI (Claude Pro/Max login)    command: claude
+  "gemini_cli" -> the older Gemini CLI                      command: gemini
+  "auto"       -> tries the "order" list; on a limit/error it falls back to the next one
 """
 import json
 import os
@@ -28,7 +30,7 @@ class QuotaError(BrainError):
 
 SCHEMA = """{
   "keep": true,
-  "score": 7,
+  "score": 7.8,
   "reason": "one sentence: why",
   "cut": {"start": 12.0, "end": 41.5},
   "layout": "stacked | fullcam | game",
@@ -93,7 +95,11 @@ def build_prompt(ctx, frames, prev_plan=None, feedback=None):
     lines += [
         "DECIDE:",
         "1. keep/score: would a US viewer who doesn't know this streamer enjoy it as a standalone "
-        "Short? score 1-10. Reject (keep=false) boring, context-heavy or ad/sponsor moments.",
+        "Short? score 1-10 with ONE DECIMAL (e.g. 6.4, 7.3, 8.1) and be strict: the channel only "
+        f"publishes clips scoring {ctx.get('min_score', 7.5)} or higher, so give that only to moments "
+        "with a clear, instantly understandable payoff (a big fail/win, a hilarious reaction, a "
+        "shocking moment). Average funny moments are 5-7. Reject (keep=false) boring, "
+        "context-heavy or ad/sponsor moments.",
         "2. cut: 15-45 s. Start just before the setup (no dead air), end right after the "
         "payoff/reaction. Never cut mid-sentence (use the transcript times).",
         "3. layout: 'stacked' = gameplay with a facecam box -> facecam on top, gameplay below; "
@@ -212,6 +218,40 @@ def call_gemini(prompt, cwd, c, images):
     return text
 
 
+def call_antigravity(prompt, cwd, c, images):
+    """Antigravity CLI (agy), Gemini's newer CLI. The prompt is written to a file and agy is
+    told to read it (the Windows command line can't take a prompt this long)."""
+    pf = os.path.join(cwd, "agy_prompt.md")
+    with open(pf, "w", encoding="utf-8") as f:
+        f.write(prompt)
+    imgs = ", ".join(os.path.basename(i) if os.path.dirname(os.path.abspath(i)) == os.path.abspath(cwd)
+                     else i for i in images)
+    head = ("Read the file agy_prompt.md in the current folder and follow its instructions exactly. "
+            f"Look at these image files before deciding: {imgs}. "
+            "Do not create or modify any files. Reply with only the JSON object.")
+    cmd = [c.get("agy_cmd") or "agy", "-p", head, "--output-format", "json"]
+    if c.get("agy_model"):
+        cmd += ["--model", c["agy_model"]]
+    if c.get("agy_effort"):
+        cmd += ["--effort", c["agy_effort"]]
+    if c.get("agy_skip_permissions"):
+        cmd += ["--dangerously-skip-permissions"]
+    r = _run(cmd, "", cwd, c["brain_timeout_sec"])
+    text = r.stdout
+    try:
+        j = json.loads(r.stdout)
+        if str(j.get("status", "")).upper() in ("ERROR", "FAILED"):
+            _raise_for("antigravity", r, json.dumps(j)[:600])
+        text = j.get("response", "") or ""
+        if not isinstance(text, str):
+            text = json.dumps(text)
+    except json.JSONDecodeError:
+        pass
+    if r.returncode != 0:
+        _raise_for("antigravity", r, text)
+    return text
+
+
 def ask(prompt, cwd, images, brain=None):
     """Returns (plan, brain_used). In auto mode tries each brain in order."""
     c = config()
@@ -220,16 +260,19 @@ def ask(prompt, cwd, images, brain=None):
     errors = []
     for name in order:
         try:
-            print(f"  brain: {name} is thinking...", flush=True)
+            label = "gemini (agy)" if name in ("gemini", "antigravity", "agy") else name
+            print(f"  brain: {label} is thinking...", flush=True)
             if name == "claude":
                 text = call_claude(prompt, cwd, c)
-            elif name == "gemini":
+            elif name == "gemini_cli":
                 text = call_gemini(prompt, cwd, c, images)
+            elif name in ("gemini", "antigravity", "agy"):
+                text = call_antigravity(prompt, cwd, c, images)
             else:
                 raise BrainError(f"unknown brain: {name}")
             return extract_json(text), name
         except BrainError as e:
-            kind = "LIMIT" if isinstance(e, QuotaError) else "HATA"
+            kind = "LIMIT" if isinstance(e, QuotaError) else "ERROR"
             print(f"  [{kind}] {e}")
             errors.append(str(e))
             if len(order) > 1:
@@ -347,6 +390,7 @@ def normalize(plan, duration):
         if isinstance(o, dict) and "t" in o:
             cs.append({"t": num(o["t"], 0, 0, 9999), "dur": num(o.get("dur"), 3.5, 2, 5)})
     p["chat_show"] = cs
+    p["score"] = round(min(10.0, max(0.0, p["score"])), 1)
     p["hook"] = str(p.get("hook", "")).upper()[:60]
     p["emphasis"] = [str(w).upper() for w in (p.get("emphasis") or [])][:8]
     for k in ("title", "description", "reason"):
