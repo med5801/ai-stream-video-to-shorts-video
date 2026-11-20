@@ -1,13 +1,16 @@
 {
-  "brain": "auto",
-  "order": ["claude", "gemini"],
+  "brain": "gemini",
+  "order": [
+    "gemini",
+    "claude"
+  ],
   "claude_model": "",
   "gemini_model": "",
   "whisper_model": "medium",
   "whisper_device": "auto",
   "review_plan": true,
   "review_render": true,
-  "min_score": 6,
+  "min_score": 7.5,
   "reason_language": "English",
   "caption_font": "Montserrat ExtraBold",
   "caption_size": 92,
@@ -17,5 +20,14 @@
   "auto_chat": true,
   "auto_whoosh_on_zoom": true,
   "sfx_volume": 0.8,
-  "chat_lines": 5
+  "chat_lines": 5,
+  "agy_cmd": "agy",
+  "agy_model": "gemini-4-hydrogen-medium",
+  "agy_effort": "",
+  "censor": true,
+  "censor_mode": "bleep",
+  "censor_bleep_volume": 0.22,
+  "watch_mode": "full",
+  "twitch_client_id": "",
+  "twitch_client_secret": ""
 }

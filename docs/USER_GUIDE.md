@@ -6,7 +6,7 @@ Everything you need to install, run, steer and troubleshoot the Twitch → Short
 
 1. [How it works](#1-how-it-works)
 2. [Installation](#2-installation)
-3. [Brains: Claude and Gemini](#3-brains-claude-and-gemini)
+3. [Brains: Gemini and Claude](#3-brains-gemini-and-claude)
 4. [Your first run](#4-your-first-run)
 5. [Reviewing and steering the edit](#5-reviewing-and-steering-the-edit)
 6. [Editing features](#6-editing-features)
@@ -16,6 +16,7 @@ Everything you need to install, run, steer and troubleshoot the Twitch → Short
 10. [Edit plan reference](#10-edit-plan-reference)
 11. [Troubleshooting](#11-troubleshooting)
 12. [Good practice and content rules](#12-good-practice-and-content-rules)
+13. [Automatic modes: live, watcher, resume](#13-automatic-modes-live-watcher-resume)
 
 ---
 
@@ -26,9 +27,9 @@ Everything you need to install, run, steer and troubleshoot the Twitch → Short
 | 1 | `highlights.py` | Downloads the VOD's chat (seconds, a few hundred KB), scores every 30 s window by chat activity, picks the top moments (≥ 2 min apart) and downloads **only those parts** of the video (~90 s each, source quality). |
 | 2 | `transcribe.py` | Whisper writes a word-level transcript of each clip (GPU if available). |
 | 3 | `frames.py` | Makes contact sheets (one frame every 3 s, timestamped) and one full frame with a 10 % grid so the brain can see the layout. |
-| 4 | `brain.py` | Sends frames + transcript + chat + your rules to Claude or Gemini. Gets back an **edit plan** (JSON): keep or skip, cut points, layout, hook, zooms, scenes, stickers, images, sound effects, chat moments, title and description. |
+| 4 | `brain.py` | Sends frames + transcript + chat + your rules to Gemini (default) or Claude. Gets back an **edit plan** (JSON): keep or skip, cut points, layout, hook, zooms, scenes, stickers, images, sound effects, chat moments, title and description. |
 | 5 | You | Approve, skip, or type an idea → the brain revises the plan. |
-| 6 | `render.py` | ffmpeg builds the 1080×1920 / 30 fps Short. |
+| 6 | `render.py` | ffmpeg builds the 1080×1920 / 30 fps Short. Clips scoring below `min_score` (7.5) are skipped; swear words are masked in the captions and bleeped in the audio. |
 | 7 | You | The video opens. Approve, or type an idea → re-plan and re-render. |
 
 `run.py` drives the whole chain; `run.bat` is the double-click launcher.
@@ -56,11 +57,11 @@ looking at.
    works around them, but a plain path avoids surprises.
 2. **Run `setup.bat`** (double-click). It will:
    - create a Python virtual environment in `.venv`
-   - install `faster-whisper`, `opencv-python`, `numpy` (+ CUDA libraries if an NVIDIA GPU is found)
+   - install `faster-whisper`, `opencv-python`, `numpy`, `yt-dlp` (+ CUDA libraries if an NVIDIA GPU is found)
    - download the latest **TwitchDownloaderCLI** into `tools/TwitchDownloader/`
    - download **FFmpeg** (`ffmpeg.exe`, `ffprobe.exe`) into the same folder
    - create the `vods`, `shorts`, `assets`, `sfx` folders
-   - check whether `claude` and/or `gemini` are installed
+   - check whether `agy`, `claude` and/or `gemini` are installed
 3. **Install a brain** (section 3).
 
 The first transcription downloads the Whisper model (`medium`, ~1.5 GB) once.
@@ -70,36 +71,44 @@ If Windows SmartScreen says *"Windows protected your PC"* when running a `.bat` 
 
 ---
 
-## 3. Brains: Claude and Gemini
+## 3. Brains: Gemini and Claude
 
-The "brain" is an AI command-line tool that reads the frames and writes the edit plan. Both
-are used through **your own subscription login** – no API keys.
+The "brain" is an AI command-line tool that reads the frames and writes the edit plan. All
+of them are used through **your own subscription login** – no API keys.
 
-| | Claude Code | Gemini CLI |
-|---|---|---|
-| Install | `irm https://claude.ai/install.ps1 \| iex` (PowerShell) | `npm install -g @google/gemini-cli` (needs Node.js: `winget install OpenJS.NodeJS.LTS`) |
-| Log in once | run `claude`, follow the browser login | run `gemini`, choose *Sign in with Google* |
-| Account | Claude Pro / Max (the free plan has no Claude Code) | personal Google account |
-| How images are read | Claude uses its `Read` tool on the frame files | frames are attached with `@file` references |
+| | Gemini via Antigravity CLI (**default**) | Claude Code | Gemini CLI (older) |
+|---|---|---|---|
+| `brain` value | `gemini` (aliases `antigravity`, `agy`) | `claude` | `gemini_cli` |
+| Install | install Google's Antigravity CLI so that `agy` works in a terminal | `irm https://claude.ai/install.ps1 \| iex` (PowerShell) | `npm install -g @google/gemini-cli` |
+| Log in once | run `agy`, sign in with Google | run `claude`, follow the browser login | run `gemini`, *Sign in with Google* |
+| Model | `agy_model` (default `gemini-4-hydrogen-medium`) | `claude_model` | `gemini_model` |
+| How images are read | the prompt is written to `agy_prompt.md`, agy opens it and the frame files | `Read` tool on the frame files | `@file` references |
 
 ### Switching
 
 In `tools/config.json`:
 
 ```json
-"brain": "auto",
-"order": ["claude", "gemini"]
+"brain": "gemini",
+"agy_cmd": "agy",
+"agy_model": "gemini-4-hydrogen-medium"
 ```
 
-- `"auto"` – tries `order` from left to right. If the first brain hits a usage limit
-  (`429`, *rate limit*, *quota*, *usage limit*…) or fails, it **automatically** falls back to
-  the next one and prints which brain was used.
-- `"claude"` or `"gemini"` – use only that one.
-- One-off override: `run.bat 2929768251 --brain gemini`
-- Want Gemini first? `"order": ["gemini", "claude"]`
-- Specific models: `"claude_model": "sonnet"`, `"gemini_model": "<model name>"` (empty = CLI default).
+- `"gemini"` – Gemini only (default). If `agy` is not on your `PATH`, put its full path in
+  `agy_cmd` (e.g. `C:\\Users\\you\\AppData\\Local\\agy\\bin\\agy.exe`).
+- `"claude"` – Claude only.
+- `"auto"` – tries `order` (default `["gemini", "claude"]`) from left to right; on a usage
+  limit (`429`, *rate limit*, *quota*…) or an error it falls back to the next one.
+- One-off override: `run.bat 2929768251 --brain claude`
 
 One brain call is made per clip (plus one per revision you request).
+
+### Score threshold
+
+The brain scores every clip 1–10 **with one decimal** and is told to be strict (average funny
+moments get 5–7). Only clips scoring at least `min_score` (default **7.5**) become Shorts; in
+automatic modes the rest are skipped, in review mode you're asked. Want more videos? Lower it
+to 7. Fewer? Raise it to 8. `--force` renders a clip anyway.
 
 ---
 
@@ -304,6 +313,19 @@ Emoji that the caption font cannot draw are removed; long messages are shortened
 The stream audio is loudness-normalised to −14 LUFS (YouTube's reference), sound effects are
 mixed on top and a limiter keeps peaks below 0 dBFS.
 
+### 6.11a Profanity censoring
+
+Rule-based (no AI involved), from Whisper's word timestamps (`tools/censor.py`):
+
+- **Captions:** only the swear word is masked – `FUCKING` → `F******`.
+- **Audio:** the same span is muted and a 1 kHz bleep plays (`"censor_mode": "mute"` = silence only).
+- The hook, stickers, title/description and the on-screen chat box are masked too.
+- Built-in list: fuck, shit, bitch, ass, dick, cock, pussy, cunt, the n-word, slurs, etc.
+  Innocent look-alikes (*class, assassin, cockpit, Dickens*…) are left alone.
+- Add your own words to `tools/profanity_list.txt` (one per line).
+- The render prints `(censored 2 word(s) at 3.9s, 10.8s)` and `plan.json` gets a `censored` list.
+- Turn it off with `"censor": false`.
+
 ### 6.12 Title, description, hashtags
 
 Written by the brain to `meta.txt` (title ≤ 60 characters ending with `#shorts`, two-sentence
@@ -322,7 +344,7 @@ run.bat <vod id or link> [options]
 
 | Option | Meaning |
 |---|---|
-| `--brain auto\|claude\|gemini` | override `brain` from `config.json` |
+| `--brain gemini\|claude\|auto\|gemini_cli` | override `brain` from `config.json` |
 | `--idea "..."` | your editing idea for this run (alias: `--fikir`) |
 | `--top N` | number of moments to find when downloading (default 5) |
 | `--only 1,3` | process only these clip numbers |
@@ -330,6 +352,7 @@ run.bat <vod id or link> [options]
 | `--redownload` | find and download the clips again |
 | `--force-transcribe` | redo the transcription |
 | `--no-review` | no questions, fully automatic |
+| `--force` | render even if the brain says skip / the score is below `min_score` |
 
 Passing `--idea` also forces a re-plan.
 
@@ -355,6 +378,10 @@ for picking clips by hand.
 
 Interactive re-edit of one clip (see 5.5).
 
+### `live.bat` / `watcher.bat` / `resume.bat`
+
+See section 13.
+
 ---
 
 ## 8. Configuration (`config.json`)
@@ -363,15 +390,16 @@ Interactive re-edit of one clip (see 5.5).
 
 | Key | Default | Meaning |
 |---|---|---|
-| `brain` | `"auto"` | `auto`, `claude` or `gemini` |
-| `order` | `["claude","gemini"]` | try order for `auto` |
+| `brain` | `"gemini"` | `gemini` (Antigravity CLI), `claude`, `gemini_cli` or `auto` |
+| `order` | `["gemini","claude"]` | try order for `auto` |
+| `agy_cmd` / `agy_model` / `agy_effort` | `"agy"` / `"gemini-4-hydrogen-medium"` / `""` | Antigravity CLI command (or full path), model, effort |
 | `claude_cmd` / `gemini_cmd` | `"claude"` / `"gemini"` | command names or full paths |
 | `claude_model` / `gemini_model` | `""` | model override (empty = CLI default) |
 | `brain_timeout_sec` | 400 | max seconds per brain call |
 | `whisper_model` | `"medium"` | `small` is faster, `large-v3` more accurate (needs more VRAM) |
 | `whisper_device` | `"auto"` | `auto` (GPU then CPU), `cuda` or `cpu` |
 | `review_plan` / `review_render` | `true` | ask for your review after the plan / after the render |
-| `min_score` | 6 | clips scored lower are skipped (or flagged in review) |
+| `min_score` | 7.5 | clips scored lower are skipped (or flagged in review) |
 | `reason_language` | `"English"` | language of the brain's one-line reason |
 | `caption_font` | `"Montserrat ExtraBold"` | any installed font or one in `tools/fonts` |
 | `caption_size` | 92 | caption size (px at 1080×1920) |
@@ -381,6 +409,11 @@ Interactive re-edit of one clip (see 5.5).
 | `auto_whoosh_on_zoom` | `true` | add a whoosh on zooms if the brain chose no sfx |
 | `sfx_volume` | 0.8 | master volume for sound effects |
 | `chat_lines` | 5 | max lines in the chat box |
+| `censor` | `true` | mask swear words in captions and bleep them in the audio |
+| `censor_mode` | `"bleep"` | `bleep` (1 kHz tone) or `mute` |
+| `censor_bleep_volume` / `censor_pad` | 0.22 / 0.08 | bleep loudness / seconds added around each word |
+| `watch_mode` | `"full"` | watcher: `full` (Shorts) or `highlights` (clips only) |
+| `twitch_client_id` / `twitch_client_secret` | `""` | optional Twitch API keys for the watcher |
 | `fps` / `crf` | 30 / 20 | output frame rate / H.264 quality (lower = better) |
 
 ---
@@ -389,11 +422,15 @@ Interactive re-edit of one clip (see 5.5).
 
 ```
 repo/
-├─ run.bat  highlights.bat  revise.bat  setup.bat
+├─ run.bat  highlights.bat  revise.bat  setup.bat  live.bat  watcher.bat  resume.bat
 ├─ tools/
 │  ├─ run.py brain.py render.py frames.py transcribe.py highlights.py shorts_common.py
+│  ├─ live.py watcher.py resume.py censor.py
 │  ├─ config.json        settings
 │  ├─ editor_notes.txt   your standing rules
+│  ├─ profanity_list.txt extra words to censor
+│  ├─ streamers.txt      streamers for the watcher
+│  ├─ watcher_state.json processed VODs (created by the watcher)
 │  ├─ layouts.json       saved camera boxes per streamer
 │  ├─ fonts/             Montserrat ExtraBold (OFL)
 │  └─ TwitchDownloader/  TwitchDownloaderCLI.exe, ffmpeg.exe, ffprobe.exe (from setup)
@@ -421,7 +458,7 @@ is validated and clamped before rendering; unknown images or sound names are dro
 ```json
 {
   "keep": true,
-  "score": 8,
+  "score": 8.1,
   "reason": "one sentence: why",
   "cut": {"start": 31.5, "end": 58.0},
   "layout": "stacked",
@@ -466,6 +503,10 @@ You can edit `vods/<id>/work/clip_NN/plan.json` by hand (the `plan` object) and 
 | Wrong camera box | Type an idea in the review (*"the camera is bottom-left"*) or fix/delete the streamer in `tools/layouts.json`. |
 | VOD not found | The VOD was deleted, is sub-only, or the streamer disabled VODs. Twitch keeps VODs only 7–60 days. |
 | `av` / `metadata_errors` error | `.venv\Scripts\pip install "av==16.0.1"` |
+| `'agy' command not found` | Install/sign in to the Antigravity CLI, or put its full path in `agy_cmd`. |
+| A swear word wasn't bleeped | Whisper spelled it differently – add that spelling to `tools/profanity_list.txt` and re-render with `run.bat <id> --only N`. |
+| Almost no Shorts are made | `min_score` 7.5 is strict on purpose; lower it to 7 in `config.json`. |
+| Live mode says "not live" | The streamer is offline, or yt-dlp is outdated: `.venv\Scripts\pip install -U yt-dlp`. |
 
 ---
 
@@ -480,3 +521,64 @@ You can edit `vods/<id>/work/clip_NN/plan.json` by hand (the `plan` object) and 
 - **Never commit secrets.** Cookie files and `.env` are git-ignored – keep it that way.
 - **Check before uploading.** Look at `check.jpg` or watch the Short; the brain can be wrong
   about timing or context.
+
+---
+
+## 13. Automatic modes: live, watcher, resume
+
+All three run without questions (`--no-review`); only clips above `min_score` become Shorts.
+Check `check.jpg` before uploading.
+
+### 13.1 Live mode – `live.bat`
+
+Listens to the chat while the stream is running and cuts a moment ~2 minutes after chat
+explodes (Twitch needs that long to write it to the VOD).
+
+```
+live.bat xqc                      clips only
+live.bat xqc --render             also a Short from every clip
+live.bat xqc --ratio 1.7          catch more moments (huge chats)
+live.bat xqc --backfill 5         also the best 5 moments since the stream started
+live.bat xqc --render --resume    continue after the last clip of a previous run
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--ratio` | 2.2 | spike threshold (× the 5-min median). Huge chats 1.6–1.8, medium 2.0–2.2, small 2.5+ |
+| `--hype-ratio` | 2.5 | second threshold that only counts hype words (KEKW, OMEGALUL…) |
+| `--backfill N` / `--backfill-from 4h` | 0 / 0 | also scan the stream's past chat for the best N moments |
+| `--resume` | | start the history scan where the last clip of this VOD ended |
+| `--max-clips` | 30 | max clips **in this run** (earlier clips don't count) |
+| `--gap` | 150 | minimum seconds between moments |
+
+One window per streamer. Every minute it prints a status line
+(`last 30 s score 407 (normal 391) = 1.0x`). If the streamer has VODs disabled it switches to
+**recording mode**: the stream is recorded in 10 s segments and clips are cut from there
+(the past can't be scanned in this mode).
+
+### 13.2 Watcher – `watcher.bat`
+
+Checks the streamers in `tools/streamers.txt` every 30 minutes and processes each newly
+finished stream automatically. `--list` only lists, `--once` checks once, `--mode highlights`
+downloads clips without the brain. Processed VODs are stored in `tools/watcher_state.json`
+(delete an entry to process it again). Optional Twitch API keys in `config.json` make it
+notice the end of a stream immediately.
+
+### 13.3 Resume – `resume.bat`
+
+For half-finished streams (window closed, PC went to sleep, `--max-clips` reached…):
+
+```
+resume.bat                 every half-finished VOD of the last 4 days
+resume.bat 2932113307      only this VOD
+resume.bat --list          only shows the status
+resume.bat --top 8         at most 8 new moments per VOD (default: 1 per 15 min left)
+resume.bat --no-render     only download
+```
+
+- **Stream ended:** downloads the chat from the end of the last clip to the end of the VOD,
+  finds the best moments, downloads them (numbering continues) and makes Shorts.
+- **Still live:** opens `live.py <streamer> --render --resume` in a new window.
+- Clips that were downloaded but never processed are queued too.
+- Recording-mode folders (ids starting with 9, no VOD) can't go back in time; only their
+  unprocessed clips are done.

@@ -53,8 +53,11 @@ FFMPEG = _tool("ffmpeg")
 FFPROBE = _tool("ffprobe")
 
 DEFAULTS = {
-    "brain": "auto",
-    "order": ["claude", "gemini"],
+    "brain": "gemini",          # gemini (via Antigravity CLI) | claude | gemini_cli | auto
+    "order": ["gemini", "claude"],
+    "agy_cmd": "agy",
+    "agy_model": "gemini-4-hydrogen-medium",
+    "agy_effort": "",
     "claude_cmd": "claude",
     "gemini_cmd": "gemini",
     "claude_model": "",
@@ -64,7 +67,7 @@ DEFAULTS = {
     "whisper_device": "auto",
     "review_plan": True,
     "review_render": True,
-    "min_score": 6,
+    "min_score": 7.5,           # only clips scoring at least this become Shorts
     "reason_language": "English",
     "caption_font": "Montserrat ExtraBold",
     "caption_size": 92,
@@ -75,6 +78,10 @@ DEFAULTS = {
     "auto_whoosh_on_zoom": True,  # if the brain adds no sfx, add a whoosh on zooms
     "sfx_volume": 0.8,
     "chat_lines": 5,
+    "censor": True,             # mask swear words in captions + bleep them in the audio
+    "censor_mode": "bleep",     # "bleep" = 1 kHz tone, "mute" = silence only
+    "censor_bleep_volume": 0.22,
+    "censor_pad": 0.08,         # seconds added around each censored word
     "fps": 30,
     "crf": 20,
 }

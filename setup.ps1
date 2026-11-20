@@ -65,12 +65,13 @@ foreach ($d in "vods", "shorts", "assets", "sfx") { New-Item -ItemType Directory
 
 Step 7 "Brains (AI command-line tools)"
 $any = $false
-foreach ($b in "claude", "gemini") {
+foreach ($b in "agy", "claude", "gemini") {
     if (Get-Command $b -ErrorAction SilentlyContinue) { Write-Host "  [ok] $b"; $any = $true }
     else { Write-Host "  [--] $b not found" -ForegroundColor Yellow }
 }
 if (-not $any) {
     Write-Host "  Install at least one brain (see docs/USER_GUIDE.md, section 'Brains'):" -ForegroundColor Yellow
+    Write-Host "    Gemini (default): install the Antigravity CLI so 'agy' works, then run: agy"
     Write-Host "    Claude Code: irm https://claude.ai/install.ps1 | iex     then run: claude"
     Write-Host "    Gemini CLI : npm install -g @google/gemini-cli            then run: gemini"
 }

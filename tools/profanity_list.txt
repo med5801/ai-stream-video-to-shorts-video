@@ -1,0 +1,6 @@
+# EXTRA PROFANITY LIST (words to censor on top of the built-in list)
+# The built-in list already covers fuck, shit, bitch, ass, dick, the n-word, etc.
+# One word per line; anything STARTING with that word is censored too (if 4+ letters).
+# Lines starting with '#' are ignored.
+# damn
+# hell
